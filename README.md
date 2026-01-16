@@ -246,14 +246,17 @@ use nix
 - [clang-format](https://clang.llvm.org/docs/ClangFormat.html).\
   You may restrict which languages should be formatted by `clang-format` using
   `clang-format.types_or`. For example to check only C and C++ files:
+
   ```nix
   clang-format = {
     enable = true;
     types_or = lib.mkForce [ "c" "c++" ];
   };
   ```
+
   Otherwise, the default internal list is used which includes everything that
   clang-format supports.
+
 - [clang-tidy](https://clang.llvm.org/extra/clang-tidy/)
 - [cmake-format](https://cmake-format.readthedocs.io/en/latest/)
 
@@ -380,6 +383,7 @@ use nix
 - [mdformat](https://github.com/hukkin/mdformat)
 - [mdl](https://github.com/markdownlint/markdownlint/)
 - [mdsh](https://zimbatm.github.io/mdsh/)
+- [rumdl](https://github.com/rvben/rumdl)
 
 ### Nix
 
@@ -411,7 +415,6 @@ use nix
 ### Purescript
 
 - [purs-tidy](https://github.com/natefaubion/purescript-tidy)
-- [purty](https://gitlab.com/joneshf/purty)
 
 ### Python
 
@@ -467,8 +470,16 @@ use nix
 
 ### Terraform
 
-- `terraform-format`: built-in formatter (using [OpenTofu](https://opentofu.org/)'s [`fmt`](https://opentofu.org/docs/cli/commands/fmt/))
-- `terraform-validate`: built-in validator (using [OpenTofu](https://opentofu.org/)'s [`validate`](https://opentofu.org/docs/cli/commands/validate/))
+- `terraform-format`: built-in formatter (using
+  [OpenTofu](https://opentofu.org/)'s
+  [`fmt`](https://opentofu.org/docs/cli/commands/fmt/) or
+  [Terraform](https://developer.hashicorp.com/terraform)'s
+  [`fmt`](https://developer.hashicorp.com/terraform/cli/commands/fmt))
+- `terraform-validate`: built-in validator (using
+  [OpenTofu](https://opentofu.org/)'s
+  [`validate`](https://opentofu.org/docs/cli/commands/validate/)
+  [Terraform](https://developer.hashicorp.com/terraform)'s
+  [`validate`](https://developer.hashicorp.com/terraform/cli/commands/validate))
 - [tflint](https://github.com/terraform-linters/tflint)
 
 ### TOML
@@ -478,7 +489,6 @@ use nix
 
 ### Typst
 
-- [typstfmt](https://github.com/astrale-sharp/typstfmt)
 - [typstyle](https://github.com/Enter-tainer/typstyle)
 
 ### YAML

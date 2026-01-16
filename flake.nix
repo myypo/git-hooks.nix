@@ -3,7 +3,7 @@
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   inputs.flake-compat = {
-    url = "github:edolstra/flake-compat";
+    url = "github:NixOS/flake-compat";
     flake = false;
   };
   inputs.gitignore = {
@@ -20,11 +20,15 @@
         "x86_64-darwin"
         "x86_64-linux"
       ];
-      depsFor = lib.genAttrs defaultSystems (system: {
-        pkgs = nixpkgs.legacyPackages.${system};
-        exposed = import ./nix { inherit nixpkgs system; gitignore-nix-src = gitignore; isFlakes = true; };
-      });
-      forAllSystems = fn: lib.genAttrs defaultSystems (system: fn depsFor.${system});
+      genDepsFor = fn: system:
+        let
+          args = {
+            pkgs = nixpkgs.legacyPackages.${system};
+            exposed = import ./nix { inherit nixpkgs system; gitignore-nix-src = gitignore; isFlakes = true; };
+          };
+        in
+        fn args;
+      forAllSystems = fn: lib.genAttrs defaultSystems (genDepsFor fn);
     in
     {
       flakeModule = ./flake-module.nix;
@@ -36,6 +40,16 @@
         '';
       };
 
+      # The set of tools exposed by git-hooks.
+      # We use legacyPackages because not all tools are derivations that evaluate.
+      legacyPackages = forAllSystems ({ pkgs, exposed, ... }: exposed.tools // {
+        pre-commit = pkgs.pre-commit;
+      });
+
+      # WARN: use `legacyPackages` instead to get error messages for deprecated packages
+      #
+      # Each entry is guaranteed to be a derivation that evaluates.
+      # TODO: this should be deprecated as it exposes a subset of nixpkgs, which is incompatiile with the packages output.
       packages = forAllSystems ({ exposed, ... }: exposed.packages // {
         default = exposed.packages.pre-commit;
       });
@@ -46,10 +60,11 @@
         };
       });
 
-      checks = forAllSystems ({ exposed, ... }: lib.filterAttrs (k: v: v != null) exposed.checks);
+      checks = forAllSystems ({ exposed, ... }: exposed.checks);
 
       lib = forAllSystems ({ exposed, ... }: { inherit (exposed) run; });
 
+      # TODO: remove and expose a `lib` function is needed
       exposed = forAllSystems ({ exposed, ... }: exposed);
     };
 }

@@ -974,14 +974,19 @@ in
       };
       nixfmt = mkOption {
         description = "nixfmt hook";
-        visible = false;
         type = types.submodule {
           imports = [ hookModule ];
           options.settings = {
             width =
               mkOption {
-                type = types.nullOr types.int;
-                description = "Line width.";
+                type = with types; nullOr int;
+                description = "Maximum width in characters.";
+                default = null;
+              };
+            indent =
+              mkOption {
+                type = with types; nullOr int;
+                description = "Number of spaces to use for indentation.";
                 default = null;
               };
           };
@@ -1008,8 +1013,14 @@ in
           options.settings = {
             width =
               mkOption {
-                type = types.nullOr types.int;
-                description = "Line width.";
+                type = with types; nullOr int;
+                description = "Maximum width in characters.";
+                default = null;
+              };
+            indent =
+              mkOption {
+                type = with types; nullOr int;
+                description = "Number of spaces to use for indentation.";
                 default = null;
               };
           };
@@ -1612,6 +1623,28 @@ in
           };
         };
       };
+      rumdl = mkOption {
+        description = "rumdl hook";
+        type = types.submodule {
+          imports = [ hookModule ];
+          options.settings = {
+            configuration =
+              mkOption {
+                type = types.attrs;
+                description =
+                  "See https://github.com/rvben/rumdl?tab=readme-ov-file#configuration";
+                default = { };
+                example = {
+                  configuration = {
+                    MD013 = {
+                      line-length = 100;
+                    };
+                  };
+                };
+              };
+          };
+        };
+      };
       rustfmt = mkOption {
         description = ''
           Additional rustfmt settings
@@ -2174,7 +2207,7 @@ in
 
   # PLEASE keep this sorted alphabetically.
   config.hooks = mapAttrs (_: mapAttrs (_: mkDefault))
-    rec {
+    {
       actionlint =
         {
           name = "actionlint";
@@ -2607,7 +2640,7 @@ in
             # need version >= 0.4.0 for the --from-stdin flag
             toolVersionCheck = lib.versionAtLeast convco.version "0.4.0";
           in
-          lib.throwIf (convco == null || !toolVersionCheck) "The version of Nixpkgs used by git-hooks.nix does not have the `convco` package (>=0.4.0). Please use a more recent version of Nixpkgs."
+          lib.throwIfNot toolVersionCheck "The version of Nixpkgs used by git-hooks.nix does not have the `convco` package (>=0.4.0). Please use a more recent version of Nixpkgs."
             builtins.toString
             script;
         stages = [ "commit-msg" ];
@@ -3078,9 +3111,7 @@ lib.escapeShellArgs (lib.concatMap (ext: [ "--ghc-opt" "-X${ext}" ]) hooks.fourm
                 "$PRE_COMMIT_COMMIT_MSG_SOURCE" --commit-msg-file "$1"
             '';
           in
-          lib.throwIf (hooks.gptcommit.package == null) "The version of Nixpkgs used by git-hooks.nix does not have the `gptcommit` package. Please use a more recent version of Nixpkgs."
-            toString
-            script;
+          toString script;
         stages = [ "prepare-commit-msg" ];
       };
       hadolint =
@@ -3099,13 +3130,7 @@ lib.escapeShellArgs (lib.concatMap (ext: [ "--ghc-opt" "-X${ext}" ]) hooks.fourm
           ## https://github.com/Frama-C/headache/blob/master/config_builtin.txt
           files = "(\\.ml[ily]?$)|(\\.fmli?$)|(\\.[chy]$)|(\\.tex$)|(Makefile)|(README)|(LICENSE)";
           package = tools.headache;
-          entry =
-            ## NOTE: `headache` made into in nixpkgs on 12 April 2023. At the
-            ## next NixOS release, the following code will become irrelevant.
-            lib.throwIf
-              (hooks.headache.package == null)
-              "The version of nixpkgs used by git-hooks.nix does not have `ocamlPackages.headache`. Please use a more recent version of nixpkgs."
-              "${hooks.headache.package}/bin/headache -h ${hooks.headache.settings.header-file}";
+          entry = "${hooks.headache.package}/bin/headache -h ${hooks.headache.settings.header-file}";
         };
       hindent =
         {
@@ -3461,7 +3486,17 @@ lib.escapeShellArgs (lib.concatMap (ext: [ "--ghc-opt" "-X${ext}" ]) hooks.fourm
           name = "nixfmt";
           description = "Official Nix code formatter.";
           package = tools.nixfmt;
-          entry = "${hooks.nixfmt.package}/bin/nixfmt ${lib.optionalString (hooks.nixfmt.settings.width != null) "--width=${toString hooks.nixfmt.settings.width}"}";
+          entry =
+            let
+              nixfmt = hooks.nixfmt.package;
+              hasIndent = lib.versionAtLeast nixfmt.version "1.0.0";
+              cmdArgs = mkCmdArgs (with hooks.nixfmt.settings; [
+                [ (width != null) "--width=${builtins.toString width}" ]
+                [ (indent != null) "--indent=${builtins.toString indent}" ]
+              ]);
+            in
+            lib.throwIf (hooks.nixfmt.settings.indent != null && !hasIndent) "`indent` option in `nixfmt` hook can only be used with version >= 1.0.0"
+              "${nixfmt}/bin/nixfmt ${cmdArgs}";
           files = "\\.nix$";
         };
       nixfmt-classic =
@@ -3469,7 +3504,14 @@ lib.escapeShellArgs (lib.concatMap (ext: [ "--ghc-opt" "-X${ext}" ]) hooks.fourm
           name = "nixfmt-classic";
           description = "Nix code prettifier (classic).";
           package = tools.nixfmt-classic;
-          entry = "${hooks.nixfmt-classic.package}/bin/nixfmt ${lib.optionalString (hooks.nixfmt-classic.settings.width != null) "--width=${toString hooks.nixfmt-classic.settings.width}"}";
+          entry =
+            let
+              nixfmt-classic = hooks.nixfmt-classic.package;
+              cmdArgs = mkCmdArgs (with hooks.nixfmt-classic.settings; [
+                [ (width != null) "--width=${builtins.toString width}" ]
+              ]);
+            in
+            "${nixfmt-classic}/bin/nixfmt ${cmdArgs}";
           files = "\\.nix$";
         };
       nixfmt-rfc-style =
@@ -3477,7 +3519,17 @@ lib.escapeShellArgs (lib.concatMap (ext: [ "--ghc-opt" "-X${ext}" ]) hooks.fourm
           name = "nixfmt-rfc-style";
           description = "Nix code prettifier (RFC 166 style).";
           package = tools.nixfmt-rfc-style;
-          entry = "${hooks.nixfmt-rfc-style.package}/bin/nixfmt ${lib.optionalString (hooks.nixfmt-rfc-style.settings.width != null) "--width=${toString hooks.nixfmt-rfc-style.settings.width}"}";
+          entry =
+            let
+              nixfmt-rfc-style = hooks.nixfmt-rfc-style.package;
+              hasIndent = lib.versionAtLeast nixfmt-rfc-style.version "1.0.0";
+              cmdArgs = mkCmdArgs (with hooks.nixfmt-rfc-style.settings; [
+                [ (width != null) "--width=${builtins.toString width}" ]
+                [ (indent != null) "--indent=${builtins.toString indent}" ]
+              ]);
+            in
+            lib.throwIf (hooks.nixfmt-rfc-style.settings.indent != null && !hasIndent) "`indent` option in `nixfmt-rfc-style` hook can only be used with version >= 1.0.0"
+              "${nixfmt-rfc-style}/bin/nixfmt ${cmdArgs}";
           files = "\\.nix$";
         };
       nixpkgs-fmt =
@@ -3608,16 +3660,7 @@ lib.escapeShellArgs (lib.concatMap (ext: [ "--ghc-opt" "-X${ext}" ]) hooks.fourm
       pre-commit-hook-ensure-sops = {
         name = "pre-commit-hook-ensure-sops";
         package = tools.pre-commit-hook-ensure-sops;
-        entry =
-          ## NOTE: pre-commit-hook-ensure-sops landed in nixpkgs on 8 July 2022. Once it reaches a
-          ## release of NixOS, the `throwIf` piece of code below will become
-          ## useless.
-          lib.throwIf
-            (hooks.pre-commit-hook-ensure-sops.package == null)
-            "The version of nixpkgs used by git-hooks.nix does not have the `pre-commit-hook-ensure-sops` package. Please use a more recent version of nixpkgs."
-            ''
-              ${hooks.pre-commit-hook-ensure-sops.package}/bin/pre-commit-hook-ensure-sops
-            '';
+        entry = "${hooks.pre-commit-hook-ensure-sops.package}/bin/pre-commit-hook-ensure-sops";
         files = "^secrets";
       };
       # See all CLI flags for prettier [here](https://prettier.io/docs/en/cli.html).
@@ -3728,14 +3771,6 @@ lib.escapeShellArgs (lib.concatMap (ext: [ "--ghc-opt" "-X${ext}" ]) hooks.fourm
           description = "Format purescript files.";
           package = tools.purs-tidy;
           entry = "${hooks.purs-tidy.package}/bin/purs-tidy format-in-place";
-          files = "\\.purs$";
-        };
-      purty =
-        {
-          name = "purty";
-          description = "Format purescript files.";
-          package = tools.purty;
-          entry = "${hooks.purty.package}/bin/purty";
           files = "\\.purs$";
         };
       pylint =
@@ -3873,6 +3908,21 @@ lib.escapeShellArgs (lib.concatMap (ext: [ "--ghc-opt" "-X${ext}" ]) hooks.fourm
           package = tools.ruff;
           entry = "${hooks.ruff.package}/bin/ruff format";
           types = [ "python" ];
+        };
+      rumdl =
+        let
+          cmdArgs =
+            mkCmdArgs
+              (with hooks.rumdl.settings; [
+                [ (configuration != { }) " --config ${toml.generate ".rumdl.toml" configuration}" ]
+              ]);
+        in
+        {
+          name = "rumdl";
+          description = "Style checker and linter for rumdl files.";
+          package = tools.rumdl;
+          entry = "${hooks.rumdl.package}/bin/rumdl check ${cmdArgs}";
+          files = "\\.md$";
         };
       rustfmt =
         let
@@ -4076,8 +4126,24 @@ lib.escapeShellArgs (lib.concatMap (ext: [ "--ghc-opt" "-X${ext}" ]) hooks.fourm
         {
           name = "terraform-validate";
           description = "Validates terraform configuration files (`.tf`).";
-          package = tools.terraform-validate;
-          entry = "${hooks.terraform-validate.package}/bin/terraform-validate";
+          package = tools.opentofu;
+          entry =
+            let
+              terraform-validate = pkgs.writeScriptBin "terraform-validate" ''
+                #!/usr/bin/env bash
+                set -x
+                for arg in "$@"; do
+                  dirname "$arg"
+                done \
+                  | sort \
+                  | uniq \
+                  | while read dir; do
+                      ${lib.getExe hooks.terraform-validate.package} -chdir="$dir" init
+                      ${lib.getExe hooks.terraform-validate.package} -chdir="$dir" validate
+                    done
+              '';
+            in
+            "${terraform-validate}/bin/terraform-validate";
           files = "\\.(tf(vars)?|terraform\\.lock\\.hcl)$";
           excludes = [ "\\.terraform/.*$" ];
           require_serial = true;
@@ -4096,25 +4162,17 @@ lib.escapeShellArgs (lib.concatMap (ext: [ "--ghc-opt" "-X${ext}" ]) hooks.fourm
           description = "A universal formatter engine within the Tree-sitter ecosystem, with support for many languages.";
           package = tools.topiary;
           entry =
-            ## NOTE: Topiary landed in nixpkgs on 2 Dec 2022. Once it reaches a
-            ## release of NixOS, the `throwIf` piece of code below will become
-            ## useless.
-            lib.throwIf
-              (hooks.topiary.package == null)
-              "The version of nixpkgs used by git-hooks.nix does not have the `topiary` package. Please use a more recent version of nixpkgs."
-              (
-                let
-                  topiary-inplace = pkgs.writeShellApplication {
-                    name = "topiary-inplace";
-                    text = ''
-                      for file; do
-                        ${hooks.topiary.package}/bin/topiary --in-place --input-file "$file"
-                      done
-                    '';
-                  };
-                in
-                "${topiary-inplace}/bin/topiary-inplace"
-              );
+            let
+              topiary-inplace = pkgs.writeShellApplication {
+                name = "topiary-inplace";
+                text = ''
+                  for file; do
+                    ${hooks.topiary.package}/bin/topiary --in-place --input-file "$file"
+                  done
+                '';
+              };
+            in
+            "${topiary-inplace}/bin/topiary-inplace";
           files = "(\\.json$)|(\\.toml$)|(\\.mli?$)";
         };
       treefmt =
@@ -4215,22 +4273,11 @@ lib.escapeShellArgs (lib.concatMap (ext: [ "--ghc-opt" "-X${ext}" ]) hooks.fourm
             (lib.genAttrs hooks.typos.settings.ignored-words lib.id);
           types = [ "text" ];
         };
-      typstfmt = {
-        name = "typstfmt";
-        description = "format typst";
-        package = tools.typstfmt;
-        entry = "${hooks.typstfmt.package}/bin/typstfmt";
-        files = "\\.typ$";
-      };
       typstyle = {
         name = "typstyle";
         description = "Beautiful and reliable typst code formatter";
         package = tools.typstyle;
-        entry =
-          lib.throwIf
-            (hooks.typstyle.package == null)
-            "The version of nixpkgs used by git-hooks.nix must contain typstyle"
-            "${hooks.typstyle.package}/bin/typstyle -i";
+        entry = "${hooks.typstyle.package}/bin/typstyle -i";
         files = "\\.typ$";
       };
       uv-check = {
